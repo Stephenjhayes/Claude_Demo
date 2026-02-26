@@ -11,7 +11,7 @@
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/claude-code-learning.git
+git clone https://github.com/Stephenjhayes/claude-code-learning.git
 cd claude-code-learning
 open index.html   # or double-click it in Finder / Explorer
 ```

@@ -543,6 +543,43 @@
   .fp-text strong { display: block; font-weight: 500; color: var(--text); }
   .fp-text span { color: var(--muted); font-size: 12px; }
 
+  /* ── DOC CARDS ── */
+  .doc-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    text-decoration: none;
+    transition: border-color 0.2s, transform 0.2s, background 0.2s;
+  }
+
+  .doc-card:hover {
+    border-color: var(--accent2);
+    background: var(--surface2);
+    transform: translateY(-2px);
+  }
+
+  .doc-icon {
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+
+  .doc-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 3px;
+  }
+
+  .doc-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
   /* ── RESPONSIVE ── */
   @media (max-width: 600px) {
     .wrapper { padding: 32px 16px 100px; }
@@ -565,7 +602,7 @@
     <div class="progress-wrapper">
       <div class="progress-label">
         <span>Workflow Progress</span>
-        <span class="progress-count"><span id="done-count">0</span> / 8 steps complete</span>
+        <span class="progress-count"><span id="done-count">0</span> / 9 steps complete</span>
       </div>
       <div class="progress-track">
         <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
@@ -962,6 +999,69 @@
     </div>
   </div>
 
+  <div class="section-label" style="margin-top: 32px;">🖥️ Phase 3b — IDE Integration</div>
+
+  <!-- STEP: VS CODE -->
+  <div class="step pending" data-step="9">
+    <div class="step-header" onclick="toggleStep(this)">
+      <div class="step-number">
+        <span class="step-num-text">VS</span>
+        <span class="done-check">✓</span>
+      </div>
+      <div class="step-title-group">
+        <div class="step-title">Install the VS Code extension</div>
+        <div class="step-subtitle">Inline diffs · plan preview · @-mentions · conversation history</div>
+      </div>
+      <div class="step-tags">
+        <span class="tag tag-config">Config</span>
+      </div>
+      <div class="step-chevron">⌄</div>
+    </div>
+    <div class="step-body">
+      <div class="what-block">
+        <span class="icon">🖥️</span>
+        <p>The VS Code extension adds an IDE-native layer on top of the terminal experience: you can review Claude's file changes as inline diffs before they're applied, comment on Claude's plan before it executes, and reference files with @-mentions. Conversation history also persists across sessions.</p>
+      </div>
+
+      <h4>Install</h4>
+      <div class="code-block">
+        <div class="code-label"><span>VS Code — search Extensions</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="comment"># Option A: from Extensions panel (Cmd+Shift+X)</span>
+<span class="str">Search: "Claude Code"  →  Install</span>
+
+<span class="comment"># Option B: command line</span>
+<span class="cmd">code</span> <span class="flag">--install-extension</span> anthropic.claude-code
+
+<span class="comment"># Cursor users — same extension works</span>
+<span class="cmd">cursor</span> <span class="flag">--install-extension</span> anthropic.claude-code</pre>
+      </div>
+
+      <h4>Open the panel</h4>
+      <div class="code-block">
+        <div class="code-label"><span>VS Code command palette</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="comment"># Cmd+Shift+P → type:</span>
+<span class="str">Claude Code: Open in New Tab</span>
+
+<span class="comment"># Or use the shortcut:</span>
+<span class="str">Cmd+Shift+C  (Mac)  /  Ctrl+Shift+C  (Win/Linux)</span></pre>
+      </div>
+
+      <h4>What's different vs terminal</h4>
+      <ul class="checklist">
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div><strong>Inline diffs</strong> — see every change before it lands, accept/reject per hunk</div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div><strong>Plan preview</strong> — comment on Claude's plan mid-execution to course-correct</div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div><strong>@-mentions</strong> — <code style="font-family: DM Mono; color: var(--accent3);">@Button.tsx</code> or <code style="font-family: DM Mono; color: var(--accent3);">#isLoading</code> for precise context</div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div><strong>Persistent history</strong> — conversations survive session restarts</div></li>
+      </ul>
+
+      <div class="tip-box">
+        <strong>💡 Pro move:</strong> Dock the panel to your right sidebar and use plan preview before any large refactor. Ask Claude to "make a plan first" — review, comment, then approve.
+      </div>
+
+      <button class="mark-done-btn" onclick="markDone(this)">✓ Mark complete</button>
+    </div>
+  </div>
+
   <div class="section-label" style="margin-top: 32px;">🤖 Phase 4 — Multi-Agent & Automation</div>
 
   <!-- STEP 8: SUBAGENTS -->
@@ -1033,6 +1133,46 @@ build the /auth API endpoints. Run in parallel."</span>
     </div>
   </div>
 
+  <!-- DOCS SECTION -->
+  <div class="section-label" style="margin-top: 40px;">📚 Go Deeper</div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; animation: fadeUp 0.5s ease 0.5s both;">
+    <a href="docs/claude-md.md" class="doc-card">
+      <div class="doc-icon">🧠</div>
+      <div class="doc-info">
+        <div class="doc-title">CLAUDE.md Guide</div>
+        <div class="doc-desc">Anatomy, hierarchy, advanced patterns</div>
+      </div>
+    </a>
+    <a href="docs/slash-commands.md" class="doc-card">
+      <div class="doc-icon">⚡</div>
+      <div class="doc-info">
+        <div class="doc-title">Slash Commands</div>
+        <div class="doc-desc">Writing commands with arguments & MCP</div>
+      </div>
+    </a>
+    <a href="docs/hooks.md" class="doc-card">
+      <div class="doc-icon">🪝</div>
+      <div class="doc-info">
+        <div class="doc-title">Hooks</div>
+        <div class="doc-desc">Lifecycle, env vars, real examples</div>
+      </div>
+    </a>
+    <a href="docs/mcp-servers.md" class="doc-card">
+      <div class="doc-icon">🔌</div>
+      <div class="doc-info">
+        <div class="doc-title">MCP Servers</div>
+        <div class="doc-desc">GitHub, Slack, Postgres, custom</div>
+      </div>
+    </a>
+    <a href="docs/vscode-setup.md" class="doc-card">
+      <div class="doc-icon">🖥️</div>
+      <div class="doc-info">
+        <div class="doc-title">VS Code Extension</div>
+        <div class="doc-desc">Diffs, plans, @-mentions, JetBrains</div>
+      </div>
+    </a>
+  </div>
+
 </div><!-- /wrapper -->
 
 <!-- Floating Progress Widget -->
@@ -1051,7 +1191,7 @@ build the /auth API endpoints. Run in parallel."</span>
 </div>
 
 <script>
-  const TOTAL = 8;
+  const TOTAL = 9;
   const stateKey = 'claudeCodeProgress';
   let state = JSON.parse(localStorage.getItem(stateKey) || '{}');
 
