@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code — Setup Workflow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161d;
+    --surface2: #1a1e28;
+    --border: #252a38;
+    --text: #e8eaf2;
+    --muted: #6b7494;
+    --accent: #ff6b35;
+    --accent2: #7c6aff;
+    --accent3: #00d4aa;
+    --accent4: #ffcc00;
+    --done: #1a2e28;
+    --done-border: #00d4aa;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE TEXTURE ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* ── GRID LINES ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(124,106,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,106,255,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── LAYOUT ── */
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 60px 32px 120px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    margin-bottom: 72px;
+    animation: fadeUp 0.7s ease both;
+  }
+
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,107,53,0.1);
+    border: 1px solid rgba(255,107,53,0.3);
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 24px;
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-size: clamp(42px, 6vw, 72px);
+    font-weight: 600;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-bottom: 20px;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 300;
+  }
+
+  .subtitle {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 520px;
+    line-height: 1.6;
+  }
+
+  /* ── PROGRESS BAR ── */
+  .progress-wrapper {
+    margin: 40px 0 64px;
+    animation: fadeUp 0.7s ease 0.1s both;
+  }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .progress-count {
+    font-family: 'DM Mono', monospace;
+    color: var(--accent3);
+  }
+
+  .progress-track {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3));
+    border-radius: 2px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ── STEP GRID ── */
+  .steps-grid {
+    display: grid;
+    gap: 16px;
+  }
+
+  /* ── STEP CARD ── */
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+    animation: fadeUp 0.5s ease both;
+  }
+
+  .step:hover { transform: translateY(-1px); }
+
+  .step.active { border-color: var(--accent2); }
+  .step.done { border-color: var(--done-border); background: var(--done); }
+  .step.done .step-header { background: transparent; }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+  }
+
+  .step-header:hover { background: rgba(255,255,255,0.02); }
+
+  .step-number {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    flex-shrink: 0;
+    transition: all 0.3s;
+  }
+
+  .step.pending .step-number { 
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .step.active .step-number { 
+    background: rgba(124,106,255,0.15);
+    border: 1px solid var(--accent2);
+    color: var(--accent2);
+  }
+  .step.done .step-number { 
+    background: rgba(0,212,170,0.15);
+    border: 1px solid var(--accent3);
+    color: var(--accent3);
+  }
+
+  .done-check {
+    display: none;
+    font-size: 16px;
+  }
+  .step.done .done-check { display: block; }
+  .step.done .step-num-text { display: none; }
+
+  .step-title-group { flex: 1; }
+
+  .step-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text);
+    transition: color 0.2s;
+  }
+
+  .step.done .step-title { color: var(--muted); }
+
+  .step-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 3px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .step-tags {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .tag {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 100px;
+    border: 1px solid;
+  }
+
+  .tag-setup { color: var(--accent); border-color: rgba(255,107,53,0.3); background: rgba(255,107,53,0.08); }
+  .tag-config { color: var(--accent2); border-color: rgba(124,106,255,0.3); background: rgba(124,106,255,0.08); }
+  .tag-power { color: var(--accent3); border-color: rgba(0,212,170,0.3); background: rgba(0,212,170,0.08); }
+  .tag-advanced { color: var(--accent4); border-color: rgba(255,204,0,0.3); background: rgba(255,204,0,0.08); }
+
+  .step-chevron {
+    color: var(--muted);
+    font-size: 20px;
+    transition: transform 0.25s;
+    flex-shrink: 0;
+  }
+  .step.open .step-chevron { transform: rotate(180deg); }
+
+  /* ── STEP BODY ── */
+  .step-body {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding: 28px 24px;
+  }
+
+  .step.open .step-body { display: block; animation: bodySlide 0.25s ease; }
+
+  @keyframes bodySlide {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── CONTENT BLOCKS ── */
+  .what-block {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: var(--surface2);
+    border-radius: 10px;
+    border-left: 3px solid var(--accent2);
+  }
+
+  .what-block .icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+
+  .what-block p {
+    font-size: 14px;
+    color: #a0a6c0;
+    line-height: 1.7;
+  }
+
+  /* ── CODE BLOCKS ── */
+  .code-block {
+    background: #0a0c12;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 16px 0;
+    overflow: hidden;
+  }
+
+  .code-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 3px 10px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    transition: all 0.15s;
+  }
+
+  .copy-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .copy-btn.copied { border-color: var(--accent3); color: var(--accent3); }
+
+  pre {
+    padding: 16px;
+    overflow-x: auto;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #c9d1f5;
+  }
+
+  .cmd { color: var(--accent); }
+  .flag { color: #7c9fcc; }
+  .comment { color: #4a5570; font-style: italic; }
+  .str { color: var(--accent3); }
+  .key { color: var(--accent2); }
+  .val { color: #ffcc80; }
+
+  /* ── CHECKLIST ── */
+  .checklist {
+    list-style: none;
+    margin: 16px 0;
+  }
+
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    font-size: 14px;
+    line-height: 1.5;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .checklist li:last-child { border-bottom: none; }
+
+  .check-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .check-icon.checked {
+    background: rgba(0,212,170,0.15);
+    border-color: var(--accent3);
+    color: var(--accent3);
+  }
+
+  /* ── TIP BOX ── */
+  .tip-box {
+    margin-top: 20px;
+    padding: 14px 16px;
+    background: rgba(255,204,0,0.06);
+    border: 1px solid rgba(255,204,0,0.2);
+    border-radius: 10px;
+    font-size: 13px;
+    color: #c9b060;
+    line-height: 1.6;
+  }
+
+  .tip-box strong { color: var(--accent4); }
+
+  /* ── FILE REFERENCE ── */
+  .file-ref {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--accent2);
+  }
+
+  /* ── MARK DONE BUTTON ── */
+  .mark-done-btn {
+    margin-top: 24px;
+    width: 100%;
+    padding: 12px;
+    background: rgba(124,106,255,0.1);
+    border: 1px solid rgba(124,106,255,0.3);
+    border-radius: 10px;
+    color: var(--accent2);
+    font-size: 14px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mark-done-btn:hover {
+    background: rgba(124,106,255,0.2);
+    border-color: var(--accent2);
+  }
+
+  .step.done .mark-done-btn {
+    background: rgba(0,212,170,0.1);
+    border-color: rgba(0,212,170,0.3);
+    color: var(--accent3);
+  }
+
+  /* ── SECTION LABELS ── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 32px 0 12px;
+    padding-left: 2px;
+  }
+
+  .section-label:first-child { margin-top: 0; }
+
+  /* ── DIVIDERS ── */
+  h4 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin: 20px 0 8px;
+    font-weight: 500;
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .step:nth-child(1) { animation-delay: 0.1s; }
+  .step:nth-child(2) { animation-delay: 0.15s; }
+  .step:nth-child(3) { animation-delay: 0.2s; }
+  .step:nth-child(4) { animation-delay: 0.25s; }
+  .step:nth-child(5) { animation-delay: 0.3s; }
+  .step:nth-child(6) { animation-delay: 0.35s; }
+  .step:nth-child(7) { animation-delay: 0.4s; }
+  .step:nth-child(8) { animation-delay: 0.45s; }
+
+  /* ── FLOATING PROGRESS ── */
+  .floating-progress {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    z-index: 10;
+    animation: fadeUp 0.7s ease 0.5s both;
+    backdrop-filter: blur(12px);
+  }
+
+  .fp-ring {
+    width: 44px;
+    height: 44px;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .fp-ring svg {
+    transform: rotate(-90deg);
+    width: 44px;
+    height: 44px;
+  }
+
+  .fp-ring circle {
+    fill: none;
+    stroke-width: 3;
+  }
+
+  .fp-ring .track { stroke: var(--border); }
+  .fp-ring .fill { 
+    stroke: var(--accent3); 
+    stroke-dasharray: 120;
+    stroke-dashoffset: 120;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .fp-pct {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .fp-text { font-size: 13px; }
+  .fp-text strong { display: block; font-weight: 500; color: var(--text); }
+  .fp-text span { color: var(--muted); font-size: 12px; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .wrapper { padding: 32px 16px 100px; }
+    .step-tags { display: none; }
+    .floating-progress { bottom: 16px; right: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <header>
+    <div class="header-badge">
+      <span>🤖</span> Claude Code Feature Guide
+    </div>
+    <h1>Setup <em>Claude Code</em><br>for your project</h1>
+    <p class="subtitle">A hands-on step-by-step workflow covering every major feature — from first install to multi-agent orchestration.</p>
+
+    <div class="progress-wrapper">
+      <div class="progress-label">
+        <span>Workflow Progress</span>
+        <span class="progress-count"><span id="done-count">0</span> / 8 steps complete</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="section-label">🔧 Phase 1 — Installation & First Run</div>
+
+  <!-- STEP 1: INSTALL -->
+  <div class="step pending" data-step="1">
+    <div class="step-header" onclick="toggleStep(this)">
+      <div class="step-number">
+        <span class="step-num-text">01</span>
+        <span class="done-check">✓</span>
+      </div>
+      <div class="step-title-group">
+        <div class="step-title">Install Claude Code</div>
+        <div class="step-subtitle">npm / homebrew / winget · requires Node 18+</div>
+      </div>
+      <div class="step-tags">
+        <span class="tag tag-setup">Setup</span>
+      </div>
+      <div class="step-chevron">⌄</div>
+    </div>
+    <div class="step-body">
+      <div class="what-block">
+        <span class="icon">💡</span>
+        <p>Claude Code is a CLI tool that lives in your terminal. It reads your entire codebase and executes tasks using natural language. Install it globally so it's available in every project.</p>
+      </div>
+
+      <h4>Choose your install method</h4>
+      <div class="code-block">
+        <div class="code-label"><span>macOS — Homebrew (recommended, auto-updates)</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="cmd">brew</span> install claude-code</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label"><span>Windows — WinGet</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="cmd">winget</span> install Anthropic.ClaudeCode</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-label"><span>npm (all platforms)</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="cmd">npm</span> install <span class="flag">-g</span> @anthropic-ai/claude-code</pre>
+      </div>
+
+      <h4>Verify install</h4>
+      <div class="code-block">
+        <div class="code-label"><span>terminal</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="cmd">claude</span> <span class="flag">--version</span>
+<span class="comment"># → Claude Code v1.x.x</span>
+
+<span class="cmd">claude</span> <span class="flag">doctor</span>
+<span class="comment"># → Runs diagnostics, checks login status</span></pre>
+      </div>
+
+      <div class="tip-box">
+        <strong>💡 Windows users:</strong> Install Git for Windows first. Windows ARM64 requires a remote session (WSL2 or SSH).
+      </div>
+
+      <button class="mark-done-btn" onclick="markDone(this)">✓ Mark complete</button>
+    </div>
+  </div>
+
+  <!-- STEP 2: FIRST SESSION -->
+  <div class="step pending" data-step="2">
+    <div class="step-header" onclick="toggleStep(this)">
+      <div class="step-number">
+        <span class="step-num-text">02</span>
+        <span class="done-check">✓</span>
+      </div>
+      <div class="step-title-group">
+        <div class="step-title">Start your first session</div>
+        <div class="step-subtitle">claude · login · explore the TUI</div>
+      </div>
+      <div class="step-tags">
+        <span class="tag tag-setup">Setup</span>
+      </div>
+      <div class="step-chevron">⌄</div>
+    </div>
+    <div class="step-body">
+      <div class="what-block">
+        <span class="icon">🚀</span>
+        <p>Navigate to your project directory and run <code style="font-family: DM Mono; color: var(--accent3);">claude</code>. On first launch you'll be prompted to log in. After that you're in an interactive session with full access to your codebase.</p>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label"><span>terminal</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="cmd">cd</span> /your/project
+
+<span class="cmd">claude</span>
+<span class="comment"># → Opens TUI, prompts login on first use</span>
+<span class="comment"># → After login, you're live</span></pre>
+      </div>
+
+      <h4>Essential first commands to try</h4>
+      <ul class="checklist">
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div><span class="file-ref">/help</span> — see all available slash commands</div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div><span class="file-ref">/status</span> — show model, permissions, and session info</div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div>Type: <em>"Explain the structure of this project"</em></div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div>Try: <em>"List all TODO comments in the codebase"</em></div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div><span class="file-ref">Ctrl+R</span> — search prompt history</div></li>
+      </ul>
+
+      <div class="tip-box">
+        <strong>💡 Tip:</strong> Use <code style="font-family: DM Mono;">claude -p "your task"</code> for non-interactive / scripted use (great for CI pipelines).
+      </div>
+
+      <button class="mark-done-btn" onclick="markDone(this)">✓ Mark complete</button>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top: 32px;">📋 Phase 2 — Project Configuration</div>
+
+  <!-- STEP 3: CLAUDE.md -->
+  <div class="step pending" data-step="3">
+    <div class="step-header" onclick="toggleStep(this)">
+      <div class="step-number">
+        <span class="step-num-text">03</span>
+        <span class="done-check">✓</span>
+      </div>
+      <div class="step-title-group">
+        <div class="step-title">Create your CLAUDE.md</div>
+        <div class="step-subtitle">Project memory · coding standards · architecture</div>
+      </div>
+      <div class="step-tags">
+        <span class="tag tag-config">Config</span>
+      </div>
+      <div class="step-chevron">⌄</div>
+    </div>
+    <div class="step-body">
+      <div class="what-block">
+        <span class="icon">🧠</span>
+        <p>CLAUDE.md is a markdown file in your project root that Claude Code reads at the start of every session. Use it to encode your team's coding standards, architecture decisions, preferred libraries, and review checklists — so you never re-explain them.</p>
+      </div>
+
+      <h4>Minimal starter template</h4>
+      <div class="code-block">
+        <div class="code-label"><span>CLAUDE.md</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="comment"># My App</span>
+
+<span class="comment">## Tech Stack</span>
+<span class="str">- Frontend: React + TypeScript</span>
+<span class="str">- Backend: Node.js / Express</span>
+<span class="str">- DB: PostgreSQL</span>
+
+<span class="comment">## Coding Standards</span>
+<span class="str">- Functional components only, no class components</span>
+<span class="str">- All async functions must handle errors explicitly</span>
+<span class="str">- Run `npm run lint` after every TypeScript edit</span>
+
+<span class="comment">## Common Commands</span>
+<span class="str">- `npm run dev`   → start dev server</span>
+<span class="str">- `npm run test`  → run tests</span>
+
+<span class="comment">## Notes for Claude Code</span>
+<span class="str">- DB migrations go in src/db/migrations/ with timestamp</span>
+<span class="str">- Never commit .env directly — use .env.example</span></pre>
+      </div>
+
+      <div class="tip-box">
+        <strong>📁 See the full template:</strong> <span class="file-ref">examples/CLAUDE.md.template</span> in this repo — copy it into your project and customize.
+      </div>
+
+      <button class="mark-done-btn" onclick="markDone(this)">✓ Mark complete</button>
+    </div>
+  </div>
+
+  <!-- STEP 4: PERMISSIONS -->
+  <div class="step pending" data-step="4">
+    <div class="step-header" onclick="toggleStep(this)">
+      <div class="step-number">
+        <span class="step-num-text">04</span>
+        <span class="done-check">✓</span>
+      </div>
+      <div class="step-title-group">
+        <div class="step-title">Configure permissions</div>
+        <div class="step-subtitle">.claude/settings.json · allow / deny rules</div>
+      </div>
+      <div class="step-tags">
+        <span class="tag tag-config">Config</span>
+      </div>
+      <div class="step-chevron">⌄</div>
+    </div>
+    <div class="step-body">
+      <div class="what-block">
+        <span class="icon">🔐</span>
+        <p>Claude Code asks permission before running bash commands. You can pre-approve common safe operations (like <code style="font-family: DM Mono; color: var(--accent3);">npm run *</code> and <code style="font-family: DM Mono; color: var(--accent3);">git *</code>) and pre-deny dangerous ones. Settings can be per-project or global.</p>
+      </div>
+
+      <h4>Project-level settings</h4>
+      <div class="code-block">
+        <div class="code-label"><span>.claude/settings.json</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre>{
+  <span class="key">"permissions"</span>: {
+    <span class="key">"allow"</span>: [
+      <span class="str">"Bash(npm run *)"</span>,
+      <span class="str">"Bash(git status)"</span>,
+      <span class="str">"Bash(git diff *)"</span>,
+      <span class="str">"Bash(prettier *)"</span>
+    ],
+    <span class="key">"deny"</span>: [
+      <span class="str">"Bash(rm -rf *)"</span>,
+      <span class="str">"Bash(sudo *)"</span>
+    ]
+  }
+}</pre>
+      </div>
+
+      <h4>Manage interactively</h4>
+      <div class="code-block">
+        <div class="code-label"><span>inside claude session</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="cmd">/permissions</span>
+<span class="comment"># → Opens searchable permission manager</span>
+<span class="comment"># → Use / to filter by tool name</span></pre>
+      </div>
+
+      <div class="tip-box">
+        <strong>💡 Tip:</strong> Commit <span class="file-ref">.claude/settings.json</span> to your repo so every team member starts with the same safe defaults.
+      </div>
+
+      <button class="mark-done-btn" onclick="markDone(this)">✓ Mark complete</button>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top: 32px;">⚡ Phase 3 — Power Features</div>
+
+  <!-- STEP 5: SLASH COMMANDS -->
+  <div class="step pending" data-step="5">
+    <div class="step-header" onclick="toggleStep(this)">
+      <div class="step-number">
+        <span class="step-num-text">05</span>
+        <span class="done-check">✓</span>
+      </div>
+      <div class="step-title-group">
+        <div class="step-title">Create custom slash commands</div>
+        <div class="step-subtitle">.claude/commands/ · reusable team workflows</div>
+      </div>
+      <div class="step-tags">
+        <span class="tag tag-power">Power</span>
+      </div>
+      <div class="step-chevron">⌄</div>
+    </div>
+    <div class="step-body">
+      <div class="what-block">
+        <span class="icon">⚡</span>
+        <p>Slash commands let you package repeatable workflows your team can share. Create a markdown file in <code style="font-family: DM Mono; color: var(--accent3);">.claude/commands/</code> and it becomes a <code style="font-family: DM Mono; color: var(--accent3);">/command-name</code> you can invoke instantly.</p>
+      </div>
+
+      <h4>Create a command</h4>
+      <div class="code-block">
+        <div class="code-label"><span>.claude/commands/review-pr.md</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="comment"># Review Pull Request</span>
+
+<span class="str">Perform a code review of the current branch vs main.</span>
+
+<span class="comment">## Steps</span>
+<span class="str">1. Run `git diff main...HEAD`</span>
+<span class="str">2. Check for bugs, security issues, missing tests</span>
+<span class="str">3. Run `npm run lint` and `npm run test`</span>
+
+<span class="comment">## Output Format</span>
+<span class="str">- **Summary**: overview of changes</span>
+<span class="str">- **Issues**: file:line + severity</span>
+<span class="str">- **Recommendation**: Approve / Request Changes</span></pre>
+      </div>
+
+      <h4>Use your command</h4>
+      <div class="code-block">
+        <div class="code-label"><span>inside claude session</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="cmd">/review-pr</span>
+<span class="comment"># → Claude runs your custom workflow</span>
+
+<span class="cmd">/deploy-staging</span>
+<span class="comment"># → Another example — see examples/.claude/commands/</span></pre>
+      </div>
+
+      <div class="tip-box">
+        <strong>📁 Ready-made examples:</strong> <span class="file-ref">examples/.claude/commands/review-pr.md</span> and <span class="file-ref">examples/.claude/commands/deploy-staging.md</span>
+      </div>
+
+      <button class="mark-done-btn" onclick="markDone(this)">✓ Mark complete</button>
+    </div>
+  </div>
+
+  <!-- STEP 6: HOOKS -->
+  <div class="step pending" data-step="6">
+    <div class="step-header" onclick="toggleStep(this)">
+      <div class="step-number">
+        <span class="step-num-text">06</span>
+        <span class="done-check">✓</span>
+      </div>
+      <div class="step-title-group">
+        <div class="step-title">Set up hooks</div>
+        <div class="step-subtitle">PreToolUse / PostToolUse · auto-format, safety checks</div>
+      </div>
+      <div class="step-tags">
+        <span class="tag tag-power">Power</span>
+      </div>
+      <div class="step-chevron">⌄</div>
+    </div>
+    <div class="step-body">
+      <div class="what-block">
+        <span class="icon">🪝</span>
+        <p>Hooks run shell commands before or after Claude Code actions. Use them to auto-format every file Claude edits, run lint before commits, or block dangerous operations before they happen.</p>
+      </div>
+
+      <h4>Hook lifecycle</h4>
+      <div class="code-block">
+        <div class="code-label"><span>event sequence</span></div>
+        <pre><span class="comment">PreToolUse  →  Claude runs tool  →  PostToolUse</span>
+    ↑                                     ↑
+ Safety check                       Auto-format / log</pre>
+      </div>
+
+      <h4>Wire up auto-formatting</h4>
+      <div class="code-block">
+        <div class="code-label"><span>.claude/settings.json</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre>{
+  <span class="key">"hooks"</span>: {
+    <span class="key">"PostToolUse"</span>: [{
+      <span class="key">"matcher"</span>: <span class="str">"Write|Edit|MultiEdit"</span>,
+      <span class="key">"hooks"</span>: [{
+        <span class="key">"type"</span>: <span class="str">"command"</span>,
+        <span class="key">"command"</span>: <span class="str">"prettier --write $CLAUDE_FILE_PATH"</span>
+      }]
+    }]
+  }
+}</pre>
+      </div>
+
+      <div class="tip-box">
+        <strong>📁 Full example hook script:</strong> <span class="file-ref">examples/hooks/post-edit-format.sh</span> — handles TS, Python, Go, and JSON automatically.
+      </div>
+
+      <button class="mark-done-btn" onclick="markDone(this)">✓ Mark complete</button>
+    </div>
+  </div>
+
+  <!-- STEP 7: MCP -->
+  <div class="step pending" data-step="7">
+    <div class="step-header" onclick="toggleStep(this)">
+      <div class="step-number">
+        <span class="step-num-text">07</span>
+        <span class="done-check">✓</span>
+      </div>
+      <div class="step-title-group">
+        <div class="step-title">Connect MCP servers</div>
+        <div class="step-subtitle">GitHub · Slack · Jira · custom integrations</div>
+      </div>
+      <div class="step-tags">
+        <span class="tag tag-power">Power</span>
+      </div>
+      <div class="step-chevron">⌄</div>
+    </div>
+    <div class="step-body">
+      <div class="what-block">
+        <span class="icon">🔌</span>
+        <p>The Model Context Protocol (MCP) connects Claude Code to external data sources. With it, Claude can read your Jira tickets, push to GitHub, message in Slack, or query your database — all from inside the session.</p>
+      </div>
+
+      <h4>Project MCP config</h4>
+      <div class="code-block">
+        <div class="code-label"><span>.mcp.json (in project root)</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"github"</span>: {
+      <span class="key">"type"</span>: <span class="str">"stdio"</span>,
+      <span class="key">"command"</span>: <span class="str">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"@modelcontextprotocol/server-github"</span>],
+      <span class="key">"env"</span>: {
+        <span class="key">"GITHUB_PERSONAL_ACCESS_TOKEN"</span>: <span class="str">"${GITHUB_TOKEN}"</span>
+      }
+    }
+  }
+}</pre>
+      </div>
+
+      <h4>Add via CLI</h4>
+      <div class="code-block">
+        <div class="code-label"><span>terminal</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="comment"># Add GitHub MCP server to project</span>
+<span class="cmd">claude</span> mcp add github \
+  <span class="flag">--command</span> <span class="str">"npx -y @modelcontextprotocol/server-github"</span> \
+  <span class="flag">--env</span> <span class="str">"GITHUB_PERSONAL_ACCESS_TOKEN=your_token"</span>
+
+<span class="comment"># Then inside Claude: "Create a PR for my current branch"</span></pre>
+      </div>
+
+      <div class="tip-box">
+        <strong>📁 Full MCP config with 4 servers:</strong> <span class="file-ref">examples/.mcp.json.example</span> — covers GitHub, Slack, filesystem, and PostgreSQL.
+      </div>
+
+      <button class="mark-done-btn" onclick="markDone(this)">✓ Mark complete</button>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top: 32px;">🤖 Phase 4 — Multi-Agent & Automation</div>
+
+  <!-- STEP 8: SUBAGENTS -->
+  <div class="step pending" data-step="8">
+    <div class="step-header" onclick="toggleStep(this)">
+      <div class="step-number">
+        <span class="step-num-text">08</span>
+        <span class="done-check">✓</span>
+      </div>
+      <div class="step-title-group">
+        <div class="step-title">Orchestrate sub-agents</div>
+        <div class="step-subtitle">.claude/agents/ · parallel work · checkpoints</div>
+      </div>
+      <div class="step-tags">
+        <span class="tag tag-advanced">Advanced</span>
+      </div>
+      <div class="step-chevron">⌄</div>
+    </div>
+    <div class="step-body">
+      <div class="what-block">
+        <span class="icon">🤖</span>
+        <p>Sub-agents let you spawn multiple Claude instances working in parallel. A lead agent coordinates the work — one agent builds the frontend, another builds the backend API, a third writes tests. Checkpoints let you rewind if anything goes wrong.</p>
+      </div>
+
+      <h4>Define a specialized agent</h4>
+      <div class="code-block">
+        <div class="code-label"><span>.claude/agents/frontend-agent.md</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="comment"># Frontend Agent</span>
+
+<span class="comment">## Role</span>
+<span class="str">Specialized in React components and UI logic.</span>
+
+<span class="comment">## Responsibilities</span>
+<span class="str">- Build components in src/components/</span>
+<span class="str">- Handle client-side state</span>
+<span class="str">- Run npm run test -- --testPathPattern=components</span>
+
+<span class="comment">## Constraints</span>
+<span class="str">- Do NOT touch src/api/ — backend agent owns that</span>
+
+<span class="comment">## Handoff Signal</span>
+<span class="str">End response with FRONTEND COMPLETE when done</span></pre>
+      </div>
+
+      <h4>Trigger from a session</h4>
+      <div class="code-block">
+        <div class="code-label"><span>prompt to Claude Code</span><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
+        <pre><span class="comment"># Ask Claude to spawn sub-agents:</span>
+<span class="str">"Build the full user auth feature. Use frontend-agent
+to build the login/signup forms and backend-agent to 
+build the /auth API endpoints. Run in parallel."</span>
+
+<span class="comment"># Checkpoints — auto-saved before each change</span>
+<span class="comment"># Rewind with: Esc Esc  or  /rewind</span></pre>
+      </div>
+
+      <ul class="checklist">
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div>Create <span class="file-ref">.claude/agents/</span> directory in your project</div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div>Write an agent markdown file for each domain (frontend, backend, testing)</div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div>Try a prompt that asks for parallel work on two features</div></li>
+        <li><span class="check-icon" onclick="toggleCheck(this)"></span> <div>Practice using <span class="file-ref">/rewind</span> to roll back a change</div></li>
+      </ul>
+
+      <div class="tip-box">
+        <strong>📁 See the agent template:</strong> <span class="file-ref">examples/.claude/agents/frontend-agent.md</span> — copy and adapt per domain.
+      </div>
+
+      <button class="mark-done-btn" onclick="markDone(this)">✓ Mark complete</button>
+    </div>
+  </div>
+
+</div><!-- /wrapper -->
+
+<!-- Floating Progress Widget -->
+<div class="floating-progress">
+  <div class="fp-ring">
+    <svg viewBox="0 0 44 44">
+      <circle class="track" cx="22" cy="22" r="19"/>
+      <circle class="fill" id="fp-circle" cx="22" cy="22" r="19"/>
+    </svg>
+    <div class="fp-pct" id="fp-pct">0%</div>
+  </div>
+  <div class="fp-text">
+    <strong>Progress</strong>
+    <span id="fp-label">0 of 8 complete</span>
+  </div>
+</div>
+
+<script>
+  const TOTAL = 8;
+  const stateKey = 'claudeCodeProgress';
+  let state = JSON.parse(localStorage.getItem(stateKey) || '{}');
+
+  function save() { localStorage.setItem(stateKey, JSON.stringify(state)); }
+
+  function updateProgress() {
+    const done = Object.values(state).filter(Boolean).length;
+    const pct = Math.round((done / TOTAL) * 100);
+
+    document.getElementById('done-count').textContent = done;
+    document.getElementById('progress-fill').style.width = pct + '%';
+
+    // Floating widget
+    const circumference = 2 * Math.PI * 19; // ~120
+    const offset = circumference - (pct / 100) * circumference;
+    document.getElementById('fp-circle').style.strokeDasharray = circumference;
+    document.getElementById('fp-circle').style.strokeDashoffset = offset;
+    document.getElementById('fp-pct').textContent = pct + '%';
+    document.getElementById('fp-label').textContent = done + ' of ' + TOTAL + ' complete';
+  }
+
+  function restoreState() {
+    for (const [step, done] of Object.entries(state)) {
+      if (done) {
+        const el = document.querySelector('[data-step="' + step + '"]');
+        if (el) el.classList.replace('pending', 'done');
+      }
+    }
+    updateProgress();
+  }
+
+  function toggleStep(header) {
+    const step = header.closest('.step');
+    const isOpen = step.classList.contains('open');
+    // Close all
+    document.querySelectorAll('.step.open').forEach(s => s.classList.remove('open'));
+    if (!isOpen) step.classList.add('open');
+  }
+
+  function markDone(btn) {
+    const step = btn.closest('.step');
+    const stepNum = step.dataset.step;
+    const isDone = step.classList.contains('done');
+
+    if (isDone) {
+      step.classList.replace('done', 'pending');
+      step.classList.remove('active');
+      state[stepNum] = false;
+      btn.textContent = '✓ Mark complete';
+    } else {
+      step.classList.replace('pending', 'done');
+      step.classList.remove('active', 'open');
+      state[stepNum] = true;
+      btn.textContent = '↩ Mark incomplete';
+    }
+    save();
+    updateProgress();
+  }
+
+  function toggleCheck(icon) {
+    icon.classList.toggle('checked');
+    if (icon.classList.contains('checked')) icon.textContent = '✓';
+    else icon.textContent = '';
+  }
+
+  function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    navigator.clipboard.writeText(pre.innerText).then(() => {
+      btn.textContent = 'copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1800);
+    });
+  }
+
+  // Init
+  restoreState();
+</script>
+</body>
+</html>

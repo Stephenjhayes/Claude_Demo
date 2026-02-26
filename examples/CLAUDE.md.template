@@ -1,0 +1,56 @@
+# [Your Project Name]
+
+## About This Project
+[1-2 sentences: What does this project do? What problem does it solve?]
+
+## Tech Stack
+- **Frontend**: [e.g., React, Vue, vanilla JS]
+- **Backend**: [e.g., Node.js/Express, Python/FastAPI]
+- **Database**: [e.g., PostgreSQL, MongoDB]
+- **Hosting**: [e.g., Vercel, AWS, Fly.io]
+
+## Project Structure
+```
+src/
+├── components/   # Reusable UI components
+├── pages/        # Route-level components
+├── api/          # Backend API routes
+├── lib/          # Shared utilities
+└── types/        # TypeScript type definitions
+```
+
+## Coding Standards
+- Use TypeScript strict mode
+- Components: functional with hooks, no class components
+- File naming: kebab-case for files, PascalCase for components
+- All async functions must handle errors explicitly
+- No `console.log` in production code — use the logger utility
+
+## Architecture Decisions
+- API routes follow REST conventions: GET/POST/PUT/DELETE
+- State management: React Query for server state, Zustand for UI state
+- Authentication: JWT tokens, stored in httpOnly cookies
+- Forms: React Hook Form + Zod validation
+
+## Common Commands
+```bash
+npm run dev         # Start development server
+npm run build       # Production build
+npm run test        # Run test suite
+npm run lint        # Check for lint errors
+npm run db:migrate  # Run pending migrations
+```
+
+## Environment Variables
+See `.env.example` for required variables. Never commit `.env` directly.
+
+## Review Checklist
+- [ ] Tests pass (`npm run test`)
+- [ ] No lint errors (`npm run lint`)
+- [ ] .env.example updated if new variables added
+- [ ] API changes documented in docs/api.md
+
+## Notes for Claude Code
+- Always run `npm run lint` after editing TypeScript files
+- Database migrations go in `src/db/migrations/` with timestamp prefix
+- When adding new API routes, update the OpenAPI spec at `docs/openapi.yaml`
