@@ -586,6 +586,108 @@
     .step-tags { display: none; }
     .floating-progress { bottom: 16px; right: 16px; }
   }
+
+  /* ── TERMINAL PLAYER (automaton) ── */
+  .tp-autoplay-label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 20px 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .tp-autoplay-label::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent3);
+    animation: tppulse 2s ease-in-out infinite;
+  }
+  @keyframes tppulse {
+    0%, 100% { opacity: 0.35; transform: scale(1); }
+    50%       { opacity: 1;    transform: scale(1.4); }
+  }
+
+  .term-player {
+    background: #07080f;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .tp-bar {
+    display: flex;
+    align-items: center;
+    padding: 9px 14px;
+    background: #0e101a;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+  }
+  .tp-dots { display: flex; gap: 5px; }
+  .tp-dots span { width: 10px; height: 10px; border-radius: 50%; display: block; }
+  .tp-dots span:nth-child(1) { background: #ff5f56; }
+  .tp-dots span:nth-child(2) { background: #febc2e; }
+  .tp-dots span:nth-child(3) { background: #28c840; }
+
+  .tp-title {
+    flex: 1;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  .tp-replay {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 2px 9px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .tp-replay:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .tp-body {
+    padding: 14px 16px;
+    min-height: 110px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 12.5px;
+    line-height: 1.78;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .tp-line { display: flex; align-items: baseline; white-space: pre; }
+  .tp-ps1  { color: var(--accent3); flex-shrink: 0; }
+  .tp-typed { color: #d8daf0; }
+  .tp-cursor {
+    display: inline-block;
+    width: 7px; height: 13px;
+    background: var(--accent2);
+    vertical-align: text-bottom;
+    margin-left: 1px;
+    animation: tpblink 1s step-end infinite;
+  }
+  @keyframes tpblink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+  }
+
+  .tp-out        { color: #525878; }
+  .tp-out.ok     { color: var(--accent3); }
+  .tp-out.warn   { color: var(--accent4); }
+  .tp-out.err    { color: #ff6b6b; }
+  .tp-out.accent { color: var(--accent2); }
+  .tp-out.muted  { color: #3e4460; }
 </style>
 </head>
 <body>
@@ -1223,12 +1325,240 @@ build the /auth API endpoints. Run in parallel."</span>
     updateProgress();
   }
 
+  // ── TERMINAL PLAYER ──────────────────────────────────────────────────
+  class TermPlayer {
+    constructor(bodyEl, seq) {
+      this.body = bodyEl;
+      this.seq  = seq;
+      this.idx  = 0;
+      this.tid  = null;
+      this.running = false;
+    }
+    start() {
+      this.stop();
+      this.body.innerHTML = '';
+      this.idx = 0;
+      this.running = true;
+      this._next();
+    }
+    stop() {
+      clearTimeout(this.tid);
+      this.running = false;
+      const cur = this.body.querySelector('.tp-cursor');
+      if (cur) cur.remove();
+    }
+    _next() {
+      if (!this.running) return;
+      if (this.idx >= this.seq.length) {
+        this.tid = setTimeout(() => this.start(), 2600);
+        return;
+      }
+      const f = this.seq[this.idx++];
+      if (f.blank !== undefined) {
+        const el = document.createElement('div');
+        el.className = 'tp-line';
+        el.innerHTML = '&nbsp;';
+        this.body.appendChild(el);
+        this.tid = setTimeout(() => this._next(), 80);
+      } else if (f.cmd !== undefined) {
+        this._typeCmd(f.ps1 || '$ ', f.cmd, f.pause || 340);
+      } else if (f.out !== undefined) {
+        const el = document.createElement('div');
+        el.className = 'tp-line tp-out' + (f.cls ? ' ' + f.cls : '');
+        el.textContent = f.out;
+        this.body.appendChild(el);
+        this._scroll();
+        this.tid = setTimeout(() => this._next(), f.pause || 260);
+      }
+    }
+    _typeCmd(ps1, text, pauseAfter) {
+      const line    = document.createElement('div');
+      line.className = 'tp-line';
+      const ps1El   = document.createElement('span');
+      ps1El.className = 'tp-ps1';
+      ps1El.textContent = ps1;
+      const typedEl = document.createElement('span');
+      typedEl.className = 'tp-typed';
+      const curEl   = document.createElement('span');
+      curEl.className = 'tp-cursor';
+      line.appendChild(ps1El);
+      line.appendChild(typedEl);
+      line.appendChild(curEl);
+      this.body.appendChild(line);
+      this._scroll();
+      let i = 0;
+      const BASE = 36;
+      const type = () => {
+        if (!this.running) return;
+        if (i < text.length) {
+          typedEl.textContent += text[i++];
+          this._scroll();
+          this.tid = setTimeout(type, BASE + Math.random() * 20);
+        } else {
+          curEl.remove();
+          this.tid = setTimeout(() => this._next(), pauseAfter);
+        }
+      };
+      this.tid = setTimeout(type, 55);
+    }
+    _scroll() { this.body.scrollTop = this.body.scrollHeight; }
+  }
+
+  // ── AUTOMATON SEQUENCES ───────────────────────────────────────────────
+  const TP_SEQS = {
+    1: [
+      {cmd: 'npm install -g @anthropic-ai/claude-code'},
+      {out: '⠴ Installing...', cls: 'muted', pause: 900},
+      {out: '+ @anthropic-ai/claude-code@1.2.0', cls: 'ok'},
+      {blank: true},
+      {cmd: 'claude --version'},
+      {out: 'Claude Code 1.2.0', cls: 'ok'},
+      {blank: true},
+      {cmd: 'claude doctor'},
+      {out: '✓  CLI installed', cls: 'ok'},
+      {out: '✓  Node 20.11.0',  cls: 'ok'},
+      {out: '✓  Auth: logged in', cls: 'ok'},
+    ],
+    2: [
+      {cmd: 'cd my-project'},
+      {cmd: 'claude'},
+      {out: '  Welcome to Claude Code!', cls: 'accent', pause: 400},
+      {out: '  /help for all commands', cls: 'muted'},
+      {blank: true},
+      {cmd: 'Explain this project\'s structure', ps1: '> ', pause: 500},
+      {out: 'Reading 47 files...', cls: 'muted', pause: 1000},
+      {out: '• src/api        → Express REST endpoints', cls: 'out'},
+      {out: '• src/components → React UI (42 files)',    cls: 'out'},
+      {out: '• src/db         → PostgreSQL queries',     cls: 'out'},
+    ],
+    3: [
+      {cmd: 'claude /init'},
+      {out: 'Scanning project...', cls: 'muted', pause: 900},
+      {out: '✓ Created CLAUDE.md', cls: 'ok'},
+      {blank: true},
+      {cmd: 'claude'},
+      {out: 'Reading CLAUDE.md...', cls: 'muted', pause: 500},
+      {out: '✓ Tech stack: React + TypeScript', cls: 'ok'},
+      {out: '✓ Run `npm run lint` after every edit', cls: 'ok'},
+      {out: '✓ DB migrations → src/db/migrations/', cls: 'ok'},
+    ],
+    4: [
+      {cmd: 'claude'},
+      {cmd: '/permissions', ps1: '> '},
+      {out: 'Permission Manager', cls: 'accent'},
+      {out: '  allow: Bash(npm run *)', cls: 'ok'},
+      {out: '  allow: Bash(git *)',     cls: 'ok'},
+      {out: '   deny: Bash(rm -rf *)', cls: 'err'},
+      {blank: true},
+      {cmd: 'allow Bash(prettier *)', ps1: '  + '},
+      {out: '✓ Saved to .claude/settings.json', cls: 'ok'},
+    ],
+    5: [
+      {cmd: 'claude'},
+      {cmd: '/review-pr', ps1: '> '},
+      {out: 'Running: git diff main...HEAD', cls: 'muted', pause: 500},
+      {out: 'Analyzing 847 lines across 12 files...', cls: 'muted', pause: 1100},
+      {blank: true},
+      {out: 'Summary:  Adds user auth feature',          cls: 'accent'},
+      {out: 'Issue:    auth.ts:42 missing rate-limit',   cls: 'warn'},
+      {out: 'Decision: ⚠ Request Changes',               cls: 'warn'},
+    ],
+    6: [
+      {cmd: 'claude'},
+      {cmd: 'Add email validation to LoginForm', ps1: '> '},
+      {out: 'Editing src/LoginForm.tsx...', cls: 'muted', pause: 600},
+      {out: 'Hook fired: PostToolUse → Write', cls: 'accent'},
+      {out: '↳ prettier --write src/LoginForm.tsx', cls: 'muted', pause: 500},
+      {out: 'src/LoginForm.tsx  218ms', cls: 'out'},
+      {out: '✓ Edited + auto-formatted', cls: 'ok'},
+    ],
+    7: [
+      {cmd: 'claude mcp add github \\'},
+      {cmd: '--command "npx -y @mcp/server-github"', ps1: '  '},
+      {out: '✓ MCP server "github" added', cls: 'ok', pause: 500},
+      {blank: true},
+      {cmd: 'claude'},
+      {cmd: 'Create a PR for my current branch', ps1: '> '},
+      {out: 'Calling github.createPullRequest...', cls: 'muted', pause: 1000},
+      {out: '✓ PR #47 created: "feat: add auth"', cls: 'ok'},
+    ],
+    8: [
+      {cmd: 'claude'},
+      {cmd: 'Build auth: frontend-agent for UI, backend-agent for API — parallel', ps1: '> ', pause: 400},
+      {out: '↳ Spawning frontend-agent...', cls: 'accent'},
+      {out: '↳ Spawning backend-agent...', cls: 'accent', pause: 400},
+      {out: '[frontend] Building LoginForm.tsx',   cls: 'muted'},
+      {out: '[backend]  Building /auth endpoints', cls: 'muted', pause: 1200},
+      {out: '[frontend] FRONTEND COMPLETE ✓', cls: 'ok'},
+      {out: '[backend]  BACKEND COMPLETE ✓',  cls: 'ok'},
+      {out: '23 files changed across 2 agents', cls: 'out'},
+    ],
+    9: [
+      {cmd: '@LoginForm.tsx add email validation', ps1: '> '},
+      {out: 'Showing inline diff in VS Code...', cls: 'muted', pause: 800},
+      {out: '+ const isValid = email.includes("@")',  cls: 'ok'},
+      {out: '+ if (!isValid) setError("Bad email")',  cls: 'ok'},
+      {blank: true},
+      {out: 'Accept changes? (VS Code diff view)', cls: 'accent'},
+      {cmd: 'Accept All', ps1: '  '},
+      {out: '✓ LoginForm.tsx updated', cls: 'ok'},
+    ],
+  };
+
+  // ── PLAYER INSTANCES ─────────────────────────────────────────────────
+  const activePlayers = {};
+
+  function initTermPlayer(stepEl) {
+    const stepNum = parseInt(stepEl.dataset.step);
+    const seq = TP_SEQS[stepNum];
+    if (!seq) return;
+
+    // Already created — just restart
+    if (activePlayers[stepNum]) {
+      activePlayers[stepNum].start();
+      return;
+    }
+
+    const body = stepEl.querySelector('.step-body');
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML =
+      '<div class="tp-autoplay-label">Live demo — auto-plays</div>' +
+      '<div class="term-player">' +
+        '<div class="tp-bar">' +
+          '<div class="tp-dots"><span></span><span></span><span></span></div>' +
+          '<div class="tp-title">bash</div>' +
+          '<button class="tp-replay">↺ replay</button>' +
+        '</div>' +
+        '<div class="tp-body"></div>' +
+      '</div>';
+
+    const whatBlock = body.querySelector('.what-block');
+    if (whatBlock && whatBlock.nextSibling) {
+      body.insertBefore(wrap, whatBlock.nextSibling);
+    } else {
+      body.insertBefore(wrap, body.firstChild);
+    }
+
+    const tp = new TermPlayer(wrap.querySelector('.tp-body'), seq);
+    activePlayers[stepNum] = tp;
+    wrap.querySelector('.tp-replay').addEventListener('click', () => tp.start());
+    tp.start();
+  }
+
   function toggleStep(header) {
     const step = header.closest('.step');
     const isOpen = step.classList.contains('open');
-    // Close all
-    document.querySelectorAll('.step.open').forEach(s => s.classList.remove('open'));
-    if (!isOpen) step.classList.add('open');
+    // Close all open steps and stop their players
+    document.querySelectorAll('.step.open').forEach(s => {
+      s.classList.remove('open');
+      const n = parseInt(s.dataset.step);
+      if (activePlayers[n]) activePlayers[n].stop();
+    });
+    if (!isOpen) {
+      step.classList.add('open');
+      requestAnimationFrame(() => initTermPlayer(step));
+    }
   }
 
   function markDone(btn) {
