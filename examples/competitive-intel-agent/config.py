@@ -11,7 +11,19 @@ load_dotenv()
 
 # ── API keys ──────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-FIRECRAWL_API_KEY = os.environ["FIRECRAWL_API_KEY"]
+
+# Firehose (https://firehose.com) — primary real-time web mentions source (free)
+# FIREHOSE_MGMT_KEY  : fhm_... key used to create taps and install rules (one-time bootstrap)
+# FIREHOSE_TAP_TOKEN : fh_...  key used for streaming + rule queries (daily pulls)
+# Run `python main.py --bootstrap` once to create the tap and get the tap token.
+FIREHOSE_MGMT_KEY  = os.getenv("FIREHOSE_MGMT_KEY", "")
+FIREHOSE_TAP_TOKEN = os.getenv("FIREHOSE_TAP_TOKEN", "")
+FIREHOSE_TAP_NAME  = os.getenv("FIREHOSE_TAP_NAME", "guidewire-ci")
+
+# Firecrawl — deep page scraping for structured content (product pages, careers)
+# Falls back gracefully if key is absent.
+FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY", "")
+
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")          # optional, enhances news coverage
 
 # ── Model ─────────────────────────────────────────────────────────────────────
@@ -83,6 +95,12 @@ COMPETITORS = {
 # ── Firecrawl scraping targets per competitor ─────────────────────────────────
 # Ordered by priority; scraper will attempt each in turn.
 SCRAPE_TARGETS = ["press_room", "blog", "products"]
+
+# ── Firehose pull window ──────────────────────────────────────────────────────
+# How far back to replay the Firehose buffer on each daily run.
+# Firehose buffers up to 24h; use "24h" for a full day of mentions.
+FIREHOSE_SINCE = os.getenv("FIREHOSE_SINCE", "24h")
+FIREHOSE_MAX_EVENTS = int(os.getenv("FIREHOSE_MAX_EVENTS", "5000"))
 
 # ── SEC EDGAR ─────────────────────────────────────────────────────────────────
 SEC_EDGAR_BASE = "https://www.sec.gov"
