@@ -1,35 +1,29 @@
 """
 Ahrefs Firehose scraper — real-time web mentions via SSE.
 
-Firehose (https://firehose.com) streams pages crawled by Ahrefs' infrastructure
-that match Lucene rules you define.  It's free and has far broader coverage than
-any single-site scraper.
+Firehose (https://firehose.com) is backed by Ahrefs' crawler infrastructure
+and delivers matching pages via Server-Sent Events (SSE). It's free.
+
+Rules are generated automatically from company.yaml — no hardcoding needed.
 
 API overview
 ------------
 - Management key (fhm_...) : create/list/delete taps and rules
-- Tap token     (fh_...)   : stream events and manage rules on one tap
+- Tap token     (fh_...)   : stream events and query rules
 - SSE endpoint             : GET https://api.firehose.com/v1/stream
-- Buffering                : up to 24 hours (`since=24h` replays the buffer)
-- Rule syntax              : Lucene — title:, domain:, url:, recent:, AND/OR/NOT
+- Buffer                   : up to 24h (`since=24h` replays the buffer)
+- Rule syntax              : Lucene — field:, AND/OR/NOT, recent:Nh/Nd/Nmo
 - Docs                     : https://firehose.com/api-docs
-
-For competitive intelligence we:
-  1. Bootstrap: create one tap + one rule per competitor (idempotent)
-  2. Daily pull: connect to SSE with `since=24h`, drain buffered events, store them
-  3. Live mode (optional): keep connection open to receive events in real-time
 """
 
 import json
 import logging
-import os
 import time
-from datetime import datetime
 from typing import Generator
 
 import requests
 
-import sys
+import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import COMPETITORS
 from storage.database import insert_raw_event
@@ -38,77 +32,107 @@ log = logging.getLogger(__name__)
 
 FIREHOSE_API_BASE = "https://api.firehose.com/v1"
 
-# ── Per-competitor Lucene rules ───────────────────────────────────────────────
-# Each rule uses Ahrefs Firehose's Lucene syntax.
-# `recent:24h` restricts to pages published in the last 24 hours.
-# We tag each rule so we can route events back to the right competitor.
 
-COMPETITOR_RULES: dict[str, list[dict]] = {
-    "duck_creek": [
-        {"value": '"Duck Creek Technologies" AND recent:24h', "tag": "duck_creek"},
-        {"value": 'title:"Duck Creek" AND recent:24h',       "tag": "duck_creek"},
-    ],
-    "sapiens": [
-        {"value": '"Sapiens International" AND recent:24h',  "tag": "sapiens"},
-        {"value": 'title:"Sapiens" AND insurance AND recent:24h', "tag": "sapiens"},
-    ],
-    "majesco": [
-        {"value": '"Majesco" AND insurance AND recent:24h',  "tag": "majesco"},
-        {"value": 'title:"Majesco" AND recent:24h',          "tag": "majesco"},
-    ],
-    "insurity": [
-        {"value": '"Insurity" AND recent:24h',               "tag": "insurity"},
-        {"value": 'title:"Insurity" AND recent:24h',         "tag": "insurity"},
-    ],
-    "applied_systems": [
-        {"value": '"Applied Systems" AND insurance AND recent:24h', "tag": "applied_systems"},
-        {"value": 'title:"Applied Epic" AND recent:24h',            "tag": "applied_systems"},
-    ],
-    "one_shield": [
-        {"value": '"OneShield" AND recent:24h',              "tag": "one_shield"},
-    ],
-}
+# ── Rule generation ───────────────────────────────────────────────────────────
 
-# Tag → competitor_id reverse map (built from COMPETITOR_RULES at import time)
-TAG_TO_COMPETITOR: dict[str, str] = {
-    rule["tag"]: cid
-    for cid, rules in COMPETITOR_RULES.items()
-    for rule in rules
-}
+def _rules_for_competitor(competitor_id: str, cfg: dict) -> list[dict]:
+    """
+    Build Lucene Firehose rules for one competitor.
+
+    Checks for an explicit `firehose_rules` list in the competitor config first.
+    Falls back to auto-generating rules from the competitor name.
+    """
+    tag = competitor_id
+
+    # Explicit rules in company.yaml take priority
+    if explicit := cfg.get("firehose_rules"):
+        return [{"value": r, "tag": tag} for r in explicit]
+
+    name = cfg["name"]
+    rules = []
+
+    # Rule 1: exact phrase match anywhere in content
+    rules.append({
+        "value": f'"{name}" AND recent:24h',
+        "tag": tag,
+    })
+
+    # Rule 2: title match (catches press releases, articles)
+    # Use first two words of name to reduce noise for long names
+    short = " ".join(name.split()[:2])
+    if short != name:
+        rules.append({
+            "value": f'title:"{short}" AND recent:24h',
+            "tag": tag,
+        })
+
+    # Rule 3: custom news_query from config (if provided and different from name)
+    nq = cfg.get("news_query", "")
+    if nq and nq.lower() != name.lower():
+        rules.append({
+            "value": f'"{nq}" AND recent:24h',
+            "tag": tag,
+        })
+
+    return rules
+
+
+def build_all_rules() -> dict[str, list[dict]]:
+    """Return all Firehose rules keyed by competitor_id."""
+    return {
+        cid: _rules_for_competitor(cid, cfg)
+        for cid, cfg in COMPETITORS.items()
+    }
+
+
+# Flat list for bootstrap + reverse tag→competitor_id map
+def _flat_rules() -> list[dict]:
+    return [
+        rule
+        for rules in build_all_rules().values()
+        for rule in rules
+    ]
+
+
+def _tag_to_competitor() -> dict[str, str]:
+    return {
+        rule["tag"]: cid
+        for cid, rules in build_all_rules().items()
+        for rule in rules
+    }
 
 
 # ── Client helpers ────────────────────────────────────────────────────────────
 
-def _management_headers(mgmt_key: str) -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {mgmt_key}",
-        "Content-Type": "application/json",
-    }
+def _mgmt_headers(mgmt_key: str) -> dict:
+    return {"Authorization": f"Bearer {mgmt_key}", "Content-Type": "application/json"}
 
 
-def _tap_headers(tap_token: str) -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {tap_token}",
-        "Content-Type": "application/json",
-    }
+def _tap_headers(tap_token: str) -> dict:
+    return {"Authorization": f"Bearer {tap_token}", "Content-Type": "application/json"}
 
 
 # ── Tap management ─────────────────────────────────────────────────────────────
 
-def create_tap(mgmt_key: str, name: str = "guidewire-ci") -> dict:
-    """
-    Create a new tap and return the full tap object (including the fh_ token).
-    Idempotent: if a tap with this name exists, return it.
-    """
-    existing = list_taps(mgmt_key)
-    for tap in existing:
+def list_taps(mgmt_key: str) -> list[dict]:
+    resp = requests.get(
+        f"{FIREHOSE_API_BASE}/taps",
+        headers=_mgmt_headers(mgmt_key),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json().get("data", [])
+
+
+def create_tap(mgmt_key: str, name: str) -> dict:
+    """Create a tap (idempotent — returns existing tap if name matches)."""
+    for tap in list_taps(mgmt_key):
         if tap.get("name") == name:
             log.info("Tap '%s' already exists (uuid: %s)", name, tap.get("uuid"))
             return tap
-
     resp = requests.post(
         f"{FIREHOSE_API_BASE}/taps",
-        headers=_management_headers(mgmt_key),
+        headers=_mgmt_headers(mgmt_key),
         json={"name": name},
         timeout=15,
     )
@@ -116,16 +140,6 @@ def create_tap(mgmt_key: str, name: str = "guidewire-ci") -> dict:
     tap = resp.json().get("data", {})
     log.info("Created tap '%s' (uuid: %s)", name, tap.get("uuid"))
     return tap
-
-
-def list_taps(mgmt_key: str) -> list[dict]:
-    resp = requests.get(
-        f"{FIREHOSE_API_BASE}/taps",
-        headers=_management_headers(mgmt_key),
-        timeout=15,
-    )
-    resp.raise_for_status()
-    return resp.json().get("data", [])
 
 
 # ── Rule management ───────────────────────────────────────────────────────────
@@ -151,54 +165,45 @@ def create_rule(tap_token: str, value: str, tag: str) -> dict:
     return resp.json().get("data", {})
 
 
-def bootstrap_rules(tap_token: str) -> int:
+def sync_rules(tap_token: str) -> tuple[int, int]:
     """
-    Ensure all per-competitor Lucene rules exist on the tap.
-    Skips rules that already exist (matched by tag+value).
-    Returns the count of newly created rules.
+    Ensure all rules derived from company.yaml exist on the tap.
+    Returns (created, already_existing).
     """
-    existing = list_rules(tap_token)
-    existing_values = {r.get("value") for r in existing}
+    existing_values = {r.get("value") for r in list_rules(tap_token)}
     created = 0
+    skipped = 0
 
-    for cid, rules in COMPETITOR_RULES.items():
-        for rule in rules:
-            if rule["value"] in existing_values:
-                log.debug("Rule already exists: %s", rule["value"][:60])
-                continue
-            create_rule(tap_token, rule["value"], rule["tag"])
-            log.info("Created rule [%s]: %s", cid, rule["value"][:80])
-            created += 1
-            time.sleep(0.3)   # polite delay
+    for rule in _flat_rules():
+        if rule["value"] in existing_values:
+            log.debug("Rule exists: %s", rule["value"][:70])
+            skipped += 1
+            continue
+        create_rule(tap_token, rule["value"], rule["tag"])
+        log.info("Created rule [%s]: %s", rule["tag"], rule["value"][:80])
+        created += 1
+        time.sleep(0.3)
 
-    return created
+    return created, skipped
 
 
 # ── SSE streaming ─────────────────────────────────────────────────────────────
 
-def _parse_sse_events(response: requests.Response) -> Generator[dict, None, None]:
-    """
-    Parse a raw SSE stream from the Firehose API.
-    Yields parsed JSON dicts from `data:` lines.
-    """
-    event_data_lines: list[str] = []
-    for raw_line in response.iter_lines(decode_unicode=True):
-        if not raw_line:
-            # Blank line = end of one SSE event
-            if event_data_lines:
-                payload = "\n".join(event_data_lines)
+def _parse_sse(response: requests.Response) -> Generator[dict, None, None]:
+    event_lines: list[str] = []
+    for raw in response.iter_lines(decode_unicode=True):
+        if not raw:
+            if event_lines:
+                payload = "\n".join(event_lines)
                 try:
                     yield json.loads(payload)
                 except json.JSONDecodeError:
-                    log.warning("Could not parse SSE payload: %s", payload[:120])
-                event_data_lines = []
+                    log.warning("SSE parse error: %s", payload[:100])
+                event_lines = []
             continue
-
-        if raw_line.startswith("data:"):
-            event_data_lines.append(raw_line[5:].lstrip())
-        elif raw_line.startswith(":"):
-            # SSE comment / heartbeat — ignore
-            pass
+        if raw.startswith("data:"):
+            event_lines.append(raw[5:].lstrip())
+        # skip SSE comments/heartbeats
 
 
 def stream_events(
@@ -208,21 +213,12 @@ def stream_events(
     limit: int | None = None,
     timeout: int = 60,
 ) -> Generator[dict, None, None]:
-    """
-    Open an SSE connection and yield raw Firehose event dicts.
-
-    Parameters
-    ----------
-    since   : replay buffer window, e.g. "24h", "1h", "7d" (max 24h)
-    limit   : close stream after this many matching events (None = drain buffer)
-    timeout : requests read timeout in seconds (keep short for batch mode)
-    """
-    params: dict[str, str | int] = {"since": since}
+    """Open SSE connection and yield raw Firehose event dicts."""
+    params: dict = {"since": since}
     if limit is not None:
         params["limit"] = limit
 
     log.info("Opening Firehose SSE stream (since=%s, limit=%s)", since, limit)
-
     with requests.get(
         f"{FIREHOSE_API_BASE}/stream",
         headers={
@@ -235,10 +231,10 @@ def stream_events(
         timeout=(10, timeout),
     ) as resp:
         resp.raise_for_status()
-        yield from _parse_sse_events(resp)
+        yield from _parse_sse(resp)
 
 
-# ── Daily pull: drain buffer → store events ───────────────────────────────────
+# ── Daily pull ────────────────────────────────────────────────────────────────
 
 def pull_and_store_events(
     tap_token: str,
@@ -247,55 +243,34 @@ def pull_and_store_events(
     max_events: int = 5000,
 ) -> dict[str, int]:
     """
-    Drain the Firehose buffer for the past `since` window, storing each
-    matching event as a raw_event in the database.
-
+    Drain the Firehose buffer and store each event as a raw_event.
     Returns {competitor_id: events_stored}.
     """
+    tag_map = _tag_to_competitor()
     counts: dict[str, int] = {cid: 0 for cid in COMPETITORS}
     total = 0
 
     for event in stream_events(tap_token, since=since, limit=max_events):
-        # Firehose event shape (based on docs):
-        # {
-        #   "url": "...",
-        #   "title": "...",
-        #   "content": "...",  or "description": "..."
-        #   "published_at": "...",
-        #   "domain": "...",
-        #   "tags": ["duck_creek"],
-        #   ...
-        # }
         tags = event.get("tags") or event.get("matching_rules", [])
-        if isinstance(tags, list):
-            tag_strs = [
-                t.get("tag", t) if isinstance(t, dict) else str(t)
-                for t in tags
-            ]
-        else:
-            tag_strs = []
+        tag_strs = [
+            t.get("tag", t) if isinstance(t, dict) else str(t)
+            for t in (tags if isinstance(tags, list) else [])
+        ]
 
-        # Map tags back to competitor IDs
         competitor_ids = {
-            TAG_TO_COMPETITOR[tag]
-            for tag in tag_strs
-            if tag in TAG_TO_COMPETITOR
+            tag_map[tag] for tag in tag_strs if tag in tag_map
         }
-
         if not competitor_ids:
-            # Unmapped tag — store under a generic "other" bucket for review
-            competitor_ids = {"_unknown"}
+            continue
 
-        url = event.get("url", "")
-        title = event.get("title", url[:120])
-        content = event.get("content") or event.get("description") or event.get("text", "")
+        url         = event.get("url", "")
+        title       = event.get("title", url[:120])
+        content     = event.get("content") or event.get("description") or event.get("text", "")
         published_at = event.get("published_at") or event.get("crawled_at")
-        domain = event.get("domain", "")
+        domain      = event.get("domain", "")
 
         for cid in competitor_ids:
-            if cid not in counts:
-                counts[cid] = 0
-            event_id = insert_raw_event(
+            insert_raw_event(
                 competitor_id=cid,
                 source_type="firehose",
                 url=url,
@@ -312,25 +287,31 @@ def pull_and_store_events(
             counts[cid] = counts.get(cid, 0) + 1
             total += 1
 
-    log.info("Firehose pull complete: %d total events stored — %s", total, counts)
+    log.info("Firehose pull complete: %d events — %s", total, counts)
     return counts
 
 
-# ── Bootstrap helper (called once on first run) ────────────────────────────────
+# ── Bootstrap (one-time setup) ────────────────────────────────────────────────
 
-def bootstrap(mgmt_key: str, tap_name: str = "guidewire-ci") -> str:
+def bootstrap(mgmt_key: str, tap_name: str = "competitive-intel") -> str:
     """
-    One-time setup: create the tap and install all competitor rules.
-    Returns the tap token (fh_...) — store this in your .env as FIREHOSE_TAP_TOKEN.
+    Create the tap and sync all competitor rules from company.yaml.
+    Returns the tap token — store as FIREHOSE_TAP_TOKEN in .env.
     """
     tap = create_tap(mgmt_key, tap_name)
-    tap_token = tap.get("token") or tap.get("tap_token") or tap.get("fh_token", "")
+    tap_token = (
+        tap.get("token")
+        or tap.get("tap_token")
+        or tap.get("fh_token", "")
+    )
     if not tap_token:
         raise ValueError(
-            "Could not extract tap token from Firehose response. "
+            f"Could not extract tap token from Firehose response.\n"
             f"Full tap object: {tap}"
         )
-
-    n = bootstrap_rules(tap_token)
-    log.info("Bootstrap complete — %d new rules created. Tap token: %s…", n, tap_token[:12])
+    created, skipped = sync_rules(tap_token)
+    log.info(
+        "Bootstrap complete — %d rules created, %d already existed. Token: %s…",
+        created, skipped, tap_token[:12],
+    )
     return tap_token
